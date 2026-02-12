@@ -1,0 +1,35 @@
+version: "3.8"
+services:
+  ai-pipeline:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      - PORT=8080
+      - NODE_ENV=production
+      - SQLITE_PATH=/data/pipeline.db
+      - WORKSPACE_DIR=/data/workspaces
+      - AUDIT_DIR=/data/audit
+      - GITLAB_URL=${GITLAB_URL}
+      - GITLAB_TOKEN=${GITLAB_TOKEN}
+      - GITLAB_WEBHOOK_SECRET=${GITLAB_WEBHOOK_SECRET}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - INTERNAL_LLM_URL=${INTERNAL_LLM_URL}
+      - INTERNAL_LLM_API_KEY=${INTERNAL_LLM_API_KEY}
+      - INTERNAL_LLM_MODEL=${INTERNAL_LLM_MODEL}
+      - LLM_PROXY_URL=${LLM_PROXY_URL}
+      - LLM_NO_PROXY=${LLM_NO_PROXY}
+      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-AI Dev Pipeline}
+      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-ai-bot@company.com}
+    volumes:
+      - pipeline-data:/data
+      - ${HOME}/.ssh:/root/.ssh:ro
+    restart: unless-stopped
+
+volumes:
+  pipeline-data:

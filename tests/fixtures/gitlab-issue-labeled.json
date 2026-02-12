@@ -1,0 +1,27 @@
+{
+  "object_kind": "issue",
+  "event_type": "issue",
+  "user": {
+    "id": 1,
+    "username": "admin",
+    "name": "Administrator"
+  },
+  "project": {
+    "id": 42,
+    "name": "my-project",
+    "path_with_namespace": "group/my-project",
+    "git_http_url": "https://gitlab.example.com/group/my-project.git",
+    "default_branch": "main"
+  },
+  "object_attributes": {
+    "iid": 7,
+    "title": "实现用户登录功能",
+    "description": "需要实现基于 JWT 的用户登录功能，包括：\n1. 登录接口\n2. Token 刷新\n3. 登出",
+    "action": "update",
+    "author_id": 1
+  },
+  "labels": [
+    { "id": 101, "title": "auto-implement", "color": "#428BCA" },
+    { "id": 102, "title": "feature", "color": "#44AD8E" }
+  ]
+}

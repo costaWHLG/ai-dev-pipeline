@@ -1,0 +1,28 @@
+{
+  "action": "labeled",
+  "issue": {
+    "number": 15,
+    "title": "Add user authentication",
+    "body": "Implement JWT-based authentication:\n- Login endpoint\n- Token refresh\n- Logout",
+    "labels": [
+      { "id": 201, "name": "auto-implement", "color": "0075ca" },
+      { "id": 202, "name": "enhancement", "color": "a2eeef" }
+    ],
+    "user": {
+      "login": "octocat"
+    }
+  },
+  "repository": {
+    "id": 12345,
+    "name": "my-project",
+    "full_name": "octocat/my-project",
+    "clone_url": "https://github.com/octocat/my-project.git",
+    "default_branch": "main",
+    "owner": {
+      "login": "octocat"
+    }
+  },
+  "sender": {
+    "login": "octocat"
+  }
+}
