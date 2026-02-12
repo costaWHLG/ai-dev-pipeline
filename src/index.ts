@@ -17,6 +17,7 @@ import { ImplementAgent } from "./agents/implement-agent.js";
 import { TestAgent } from "./agents/test-agent.js";
 import { ReviewAgent } from "./agents/review-agent.js";
 import { CommitAgent } from "./agents/commit-agent.js";
+import { ScaffoldAgent } from "./agents/scaffold-agent.js";
 import type { DevEvent } from "./types/index.js";
 import pino from "pino";
 
@@ -40,6 +41,7 @@ async function main() {
     test: new TestAgent(auditLogger, llmRouter),
     review: new ReviewAgent(auditLogger, llmRouter),
     commit: new CommitAgent(auditLogger, llmRouter),
+    scaffold: new ScaffoldAgent(auditLogger, llmRouter),
   };
 
   // Agent 执行分发

@@ -36,9 +36,9 @@ describe("LLMRouter", () => {
     const taskModels: [TaskType, string][] = [
       ["analyze", "claude-opus-4-6"],
       ["design", "claude-opus-4-6"],
-      ["implement", "claude-sonnet-4-6"],
-      ["review", "claude-sonnet-4-6"],
-      ["fix", "claude-sonnet-4-6"],
+      ["implement", "claude-opus-4-6"],
+      ["review", "claude-opus-4-6"],
+      ["fix", "claude-opus-4-6"],
     ];
 
     it.each(taskModels)(
@@ -120,7 +120,7 @@ describe("LLMRouter", () => {
       });
 
       expect(router.route("analyze").model).toBe("claude-opus-4-6");
-      expect(router.route("review").model).toBe("claude-sonnet-4-6");
+      expect(router.route("review").model).toBe("claude-opus-4-6");
     });
 
     it("clearOverride 后恢复默认路由", () => {
@@ -131,7 +131,7 @@ describe("LLMRouter", () => {
       expect(router.route("fix").model).toBe("gpt-4o");
 
       router.clearOverride("fix");
-      expect(router.route("fix").model).toBe("claude-sonnet-4-6");
+      expect(router.route("fix").model).toBe("claude-opus-4-6");
     });
   });
 });
