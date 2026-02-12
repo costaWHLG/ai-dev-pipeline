@@ -104,33 +104,45 @@ export class ImplementAgent extends BaseAgent {
     branch: string,
   ): Promise<void> {
     const gitDir = path.join(workspace, ".git");
+    const cloneUrl = event?.project?.cloneUrl;
+    const defaultBranch = event?.project?.defaultBranch ?? "main";
 
-    if (!fs.existsSync(gitDir)) {
-      // 如果有 cloneUrl，先克隆
-      const cloneUrl = event?.project?.cloneUrl;
-      const defaultBranch = event?.project?.defaultBranch ?? "main";
-
-      if (cloneUrl) {
-        await this.gitExec(workspace, ["clone", cloneUrl, "."]);
-      } else {
-        // 本地初始化
-        await this.gitExec(workspace, ["init"]);
-        await this.gitExec(workspace, ["checkout", "-b", "main"]);
+    if (fs.existsSync(gitDir)) {
+      // 已有仓库，fetch 最新代码并重置到默认分支
+      await this.gitExec(workspace, ["fetch", "origin"]);
+      await this.gitExec(workspace, ["checkout", defaultBranch]);
+      await this.gitExec(workspace, ["reset", "--hard", `origin/${defaultBranch}`]);
+      // 清理未跟踪文件（保留 .ai-pipeline 目录）
+      await this.gitExec(workspace, ["clean", "-fd", "-e", ".ai-pipeline"]);
+    } else if (cloneUrl) {
+      // 首次克隆
+      // 清空目录后再 clone（保留 .ai-pipeline）
+      const entries = fs.readdirSync(workspace);
+      for (const entry of entries) {
+        if (entry === ".ai-pipeline") continue;
+        fs.rmSync(path.join(workspace, entry), { recursive: true, force: true });
       }
-
-      // 配置 git 用户信息
-      await this.gitExec(workspace, ["config", "user.name", config.gitAuthorName]);
-      await this.gitExec(workspace, ["config", "user.email", config.gitAuthorEmail]);
+      await this.gitExec(workspace, ["clone", cloneUrl, "."]);
+    } else {
+      // 本地初始化
+      await this.gitExec(workspace, ["init"]);
+      await this.gitExec(workspace, ["checkout", "-b", "main"]);
     }
 
+    // 配置 git 用户信息
+    await this.gitExec(workspace, ["config", "user.name", config.gitAuthorName]);
+    await this.gitExec(workspace, ["config", "user.email", config.gitAuthorEmail]);
+
     // 创建并切换到工作分支
-    if (branch !== "main") {
+    if (branch !== defaultBranch) {
+      // 先删除本地可能存在的旧分支
       try {
-        await this.gitExec(workspace, ["checkout", "-b", branch]);
+        await this.gitExec(workspace, ["branch", "-D", branch]);
       } catch {
-        // 分支可能已存在
-        await this.gitExec(workspace, ["checkout", branch]);
+        // 分支不存在，忽略
       }
+      // 从默认分支创建新分支
+      await this.gitExec(workspace, ["checkout", "-b", branch]);
     }
   }
 

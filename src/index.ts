@@ -16,6 +16,7 @@ import { DesignAgent } from "./agents/design-agent.js";
 import { ImplementAgent } from "./agents/implement-agent.js";
 import { TestAgent } from "./agents/test-agent.js";
 import { ReviewAgent } from "./agents/review-agent.js";
+import { CommitAgent } from "./agents/commit-agent.js";
 import type { DevEvent } from "./types/index.js";
 import pino from "pino";
 
@@ -38,6 +39,7 @@ async function main() {
     implement: new ImplementAgent(auditLogger, llmRouter),
     test: new TestAgent(auditLogger, llmRouter),
     review: new ReviewAgent(auditLogger, llmRouter),
+    commit: new CommitAgent(auditLogger, llmRouter),
   };
 
   // Agent 执行分发

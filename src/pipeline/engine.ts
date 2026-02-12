@@ -10,7 +10,7 @@ import { Notifier } from "./notifier.js";
 import { getRetryDelay, sleep } from "./retry.js";
 import { getStagesForEvent } from "./stages.js";
 import { StateStore } from "./state.js";
-import { createWorkspace, createArtifactDir } from "./workspace.js";
+import { getOrCreateProjectWorkspace, createArtifactDir } from "./workspace.js";
 
 /** Agent 执行函数签名 */
 export type AgentExecutor = (
@@ -43,7 +43,8 @@ export class PipelineEngine {
   /** 创建流水线实例 */
   create(event: DevEvent): PipelineInstance {
     const id = randomUUID();
-    const workspace = createWorkspace(id);
+    // 按项目复用工作目录
+    const workspace = getOrCreateProjectWorkspace(event.project.id);
     createArtifactDir(workspace, id);
 
     const branchName = event.type === "scaffold"
