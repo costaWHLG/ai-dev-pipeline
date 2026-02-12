@@ -3,6 +3,7 @@
  *
  * 输入：techStack + description + requirements + design
  * 处理：生成完整项目代码、配置文件、README 等
+ * 可选：创建远端仓库并 push
  */
 
 import fs from "node:fs";
@@ -11,8 +12,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { BaseAgent } from "./base-agent.js";
 import { config } from "../config.js";
+import { createRepo, configureGitHubWebhook, configureGitLabWebhook } from "../scaffold/repo-creator.js";
 import type { TaskType } from "../llm/providers.js";
-import type { ScaffoldPayload } from "../types/index.js";
+import type { ScaffoldPayload, DevEvent } from "../types/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -49,10 +51,11 @@ export class ScaffoldAgent extends BaseAgent {
     input: Record<string, unknown>,
     workspace: string,
     pipelineId: string,
-  ): Promise<unknown> {
+  ): Promise<{ repoUrl?: string; cloneUrl?: string; localPath: string }> {
     const artifactDir = path.join(workspace, ".ai-pipeline", pipelineId);
-    const event = input.event as Record<string, any> | undefined;
+    const event = input.event as DevEvent | undefined;
     const scaffold = event?.payload?.scaffold as ScaffoldPayload | undefined;
+    const projectName = event?.project?.name ?? scaffold?.techStack ?? "new-project";
 
     // 读取上一阶段产物
     let requirements: unknown = input.requirements;
@@ -77,7 +80,7 @@ export class ScaffoldAgent extends BaseAgent {
     // 构建输入
     const scaffoldInput: Record<string, unknown> = {
       scaffold,
-      projectName: event?.project?.name ?? scaffold?.techStack ?? "new-project",
+      projectName,
       description: event?.payload?.description ?? "",
       requirements,
       design,
@@ -92,7 +95,57 @@ export class ScaffoldAgent extends BaseAgent {
     // 生成 .ai-toolchain.json
     await this.generateToolchainConfig(workspace, scaffold?.techStack);
 
-    return result;
+    // 如果需要创建远端仓库
+    let repoUrl: string | undefined;
+    let cloneUrl: string | undefined;
+
+    if (scaffold?.createRemoteRepo) {
+      const platform = scaffold.targetPlatform;
+      console.log(`正在 ${platform} 上创建仓库: ${projectName}...`);
+
+      try {
+        const repoResult = await createRepo(platform, {
+          name: projectName,
+          description: event?.payload?.description as string,
+          visibility: "private",
+        });
+
+        repoUrl = repoResult.webUrl;
+        cloneUrl = repoResult.cloneUrl;
+
+        // 添加 remote 并 push
+        await this.gitExec(workspace, ["remote", "add", "origin", cloneUrl]);
+        await this.gitExec(workspace, ["branch", "-M", "main"]);
+        await this.gitExec(workspace, ["push", "-u", "origin", "main"]);
+
+        console.log(`仓库已创建: ${repoUrl}`);
+
+        // 配置 webhook（可选）
+        try {
+          const webhookUrl = `http://${config.port}/webhook/${platform}`;
+          if (platform === "github") {
+            const [owner, repo] = repoResult.id.split("/");
+            await configureGitHubWebhook(owner, repo, webhookUrl, config.github.webhookSecret);
+          } else {
+            await configureGitLabWebhook(repoResult.id, webhookUrl, config.gitlab.webhookSecret);
+          }
+          console.log("Webhook 已配置");
+        } catch (webhookErr) {
+          console.warn("Webhook 配置失败（可手动配置）:", webhookErr);
+        }
+
+        // 更新 event 中的 project 信息，供后续阶段使用
+        if (event?.project) {
+          event.project.id = repoResult.id;
+          event.project.cloneUrl = cloneUrl;
+        }
+      } catch (err) {
+        console.error("创建远端仓库失败:", err);
+        // 不阻塞流程，本地项目已生成
+      }
+    }
+
+    return { repoUrl, cloneUrl, localPath: workspace };
   }
 
   /** 准备工作目录 */

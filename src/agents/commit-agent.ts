@@ -26,11 +26,29 @@ export class CommitAgent {
     input: Record<string, unknown>,
     workspace: string,
     pipelineId: string,
-  ): Promise<{ mrUrl?: string; success: boolean; skipped?: boolean }> {
+  ): Promise<{ mrUrl?: string; success: boolean; skipped?: boolean; localOnly?: boolean }> {
     const event = input.event as DevEvent;
     const branch = input.branch as string;
     const artifactDir = path.join(workspace, ".ai-pipeline", pipelineId);
     const targetBranch = event.project.defaultBranch;
+
+    // scaffold 场景：没有远端仓库时跳过 push
+    const isScaffold = event.type === "scaffold";
+    const hasRemote = !!event.project.cloneUrl;
+    const createRemoteRepo = event.payload.scaffold?.createRemoteRepo;
+
+    if (isScaffold && !hasRemote && !createRemoteRepo) {
+      // 本地 scaffold，不需要 push
+      this.auditLogger.log({
+        timestamp: new Date().toISOString(),
+        pipelineId,
+        stage: "commit",
+        event: "stage_complete",
+        metadata: { skipped: false, localOnly: true, reason: "scaffold_no_remote" },
+      });
+      console.log(`Scaffold 完成，项目已生成在: ${workspace}`);
+      return { success: true, localOnly: true };
+    }
 
     // 检查是否有新 commit（相对于目标分支）
     const hasChanges = await this.hasNewCommits(workspace, targetBranch);

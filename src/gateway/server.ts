@@ -77,6 +77,21 @@ export async function createServer(onEvent: EventHandler) {
     }
   });
 
+  /** CLI 触发入口（无签名验证） */
+  app.post("/api/trigger", async (request, reply) => {
+    try {
+      const event = request.body as DevEvent;
+      if (!event || !event.id || !event.type) {
+        return reply.code(400).send({ ok: false, error: "无效的事件格式" });
+      }
+      const dispatched = await dispatchEvent(event);
+      return reply.code(200).send({ ok: true, eventId: dispatched?.id });
+    } catch (err: any) {
+      request.log.error(err, "CLI 触发处理失败");
+      return reply.code(500).send({ ok: false, error: err.message });
+    }
+  });
+
   /** 健康检查 */
   app.get("/health", async (_request, reply) => {
     return reply.code(200).send({ status: "ok" });

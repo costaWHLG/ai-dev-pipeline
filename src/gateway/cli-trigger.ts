@@ -185,9 +185,9 @@ manual 选项:
     process.exit(1);
   }
 
-  // 发送到本地服务
+  // 发送到本地服务（使用 CLI 专用接口，无签名验证）
   const port = process.env.PORT ?? "8080";
-  const url = `http://localhost:${port}/webhook/${event.source}`;
+  const url = `http://127.0.0.1:${port}/api/trigger`;
 
   console.log(`发送事件到 ${url}...`);
 
