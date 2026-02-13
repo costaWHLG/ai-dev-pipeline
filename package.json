@@ -17,6 +17,7 @@
   "description": "自动化软件开发编排服务",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
+    "@fastify/static": "^9.0.0",
     "@gitbeaker/rest": "^43.8.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@octokit/rest": "^22.0.1",
