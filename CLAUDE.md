@@ -32,3 +32,8 @@ npm run lint       # 类型检查
 - 中文注释和 commit message
 - UTF-8 编码
 - strict TypeScript
+
+## 变更流程规范
+1. 当应用的工程发生变化时，要对应变更README文件（包含中英文）；
+2. 进行特性添加时，注意分辨改特性的耦合性、可拓展性等基础特性，并进行合适的模式去实现；
+3. 重要更新要维护change log；
