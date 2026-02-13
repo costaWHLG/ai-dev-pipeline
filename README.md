@@ -153,6 +153,8 @@ npm run start
 | `AUDIT_DIR` | Audit log directory | No (default: ./data/audit) |
 | `GIT_AUTHOR_NAME` | Git commit author name | No |
 | `GIT_AUTHOR_EMAIL` | Git commit author email | No |
+| `MCP_GLOBAL_CONFIG` | Global MCP config file path | No (default: ~/.ai-pipeline/mcp-servers.json) |
+| `SKILLS_GLOBAL_DIR` | Global skills directory | No (default: ~/.ai-pipeline/skills) |
 
 ## Webhook Configuration
 
@@ -188,10 +190,13 @@ ai-dev-pipeline/
 │   ├── adapters/       # Git platform adapters (GitLab/GitHub)
 │   ├── agents/         # AI agents (analyze, design, implement, test, review)
 │   ├── audit/          # Audit logging
+│   ├── dashboard/      # Web Dashboard (HTML + CSS + JS)
 │   ├── detector/       # Tech stack detection
 │   ├── gateway/        # Webhook gateway and event normalization
 │   ├── llm/            # LLM routing, proxy, and providers
+│   ├── mcp/            # MCP (Model Context Protocol) integration
 │   ├── pipeline/       # Pipeline engine (state, queue, retry, lock)
+│   ├── skills/         # Skills management and execution
 │   ├── types/          # TypeScript type definitions
 │   ├── config.ts       # Configuration loader
 │   └── index.ts        # Application entry point
@@ -203,6 +208,239 @@ ai-dev-pipeline/
 ├── Dockerfile          # Container image definition
 └── package.json        # Project dependencies
 ```
+
+## Dashboard
+
+The built-in web dashboard provides a visual overview of pipelines, LLM configuration, Skills, and MCP servers.
+
+Access: `http://localhost:8080/dashboard/`
+
+Features:
+- Pipeline statistics and recent activity
+- Pipeline detail view with stage timeline and audit logs
+- LLM route configuration with live override support
+- Skills listing (builtin / global / project)
+- MCP server listing
+
+## LLM Configuration
+
+### Route Table
+
+Each pipeline task type maps to a default LLM model. The routing table is defined in `src/llm/providers.ts`:
+
+| Task Type | Default Model | Fallback Model |
+|-----------|--------------|----------------|
+| analyze | claude-opus-4-6 | deepseek-v3 |
+| design | claude-opus-4-6 | deepseek-v3 |
+| implement | claude-opus-4-6 | deepseek-coder-v2 |
+| review | claude-opus-4-6 | deepseek-coder-v2 |
+| fix | claude-opus-4-6 | deepseek-coder-v2 |
+
+### Runtime Override
+
+Override a route via API:
+
+```bash
+# Set override
+curl -X PUT http://localhost:8080/api/llm/routes/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"provider":"openai","model":"gpt-4","temperature":0.3,"maxTokens":16384}'
+
+# Clear override
+curl -X DELETE http://localhost:8080/api/llm/routes/analyze
+```
+
+Or use the Dashboard LLM tab for a visual editor.
+
+## Skills
+
+Skills are reusable prompt templates (Markdown + YAML front matter) that agents can invoke during pipeline execution. The `SkillsExecutor` renders the template with input variables and calls the LLM to produce output.
+
+### Directory Structure & Priority
+
+Skills are loaded from three sources. When names collide, higher-priority sources win:
+
+```
+<project>/.ai-pipeline/skills/   # Project skills (highest priority)
+~/.ai-pipeline/skills/           # User global skills
+skills/                          # Built-in skills (lowest priority)
+```
+
+The global directory is configured via `SKILLS_GLOBAL_DIR` (default `~/.ai-pipeline/skills`).
+
+### Skill File Format
+
+Each skill is a `.md` file with YAML front matter:
+
+```markdown
+---
+name: code-review
+description: Perform a thorough code review
+tags: [review, quality]
+inputs:
+  - name: code
+    description: The source code to review
+  - name: language
+    description: Programming language
+outputs:
+  - name: feedback
+    format: markdown
+---
+
+You are a senior code reviewer. Review the following {{language}} code for:
+- Correctness and edge cases
+- Security vulnerabilities
+- Performance issues
+- Code style and readability
+
+```{{language}}
+{{code}}
+```
+```
+
+### Using Skills in Pipeline
+
+Skills are automatically available to agents. You can also invoke them via the `SkillsExecutor`:
+
+```typescript
+import { SkillsManager } from "./skills/skills-manager.js";
+import { SkillsExecutor } from "./skills/skills-executor.js";
+
+const manager = new SkillsManager();
+manager.load("/path/to/project");  // loads builtin + global + project skills
+
+const executor = new SkillsExecutor(manager, llmRouter, auditLogger);
+const result = await executor.execute("code-review", {
+  code: "function add(a, b) { return a + b; }",
+  language: "javascript",
+});
+```
+
+### Querying Skills via API
+
+```bash
+# List all loaded skills
+curl http://localhost:8080/api/skills
+
+# Response example:
+# [{"name":"code-review","description":"...","source":"builtin","tags":["review","quality"],"inputs":[...],"outputs":[...]}]
+```
+
+## MCP Configuration
+
+MCP (Model Context Protocol) servers extend agent capabilities with external tools. When a pipeline runs, the `MCPManager` starts configured servers, discovers their tools, and registers them as Anthropic-compatible tools that agents can call via `tool_use`.
+
+### How It Works
+
+1. `MCPManager.startAll(projectDir)` loads config and starts all MCP servers
+2. Each server's tools are discovered via `listTools()` and registered in `MCPRegistry`
+3. Tools are exposed to agents as `mcp_<serverName>_<toolName>` in the Anthropic tool format
+4. When an agent calls an MCP tool, `MCPManager.callTool()` routes the call to the correct server
+5. On pipeline completion, `MCPManager.stopAll()` shuts down all servers
+
+### Supported Transports
+
+| Transport | Status | Config Key |
+|-----------|--------|------------|
+| stdio | Supported | `command` + `args` |
+| SSE | Planned | `url` + `transport: "sse"` |
+
+### Global Config
+
+File: `~/.ai-pipeline/mcp-servers.json` (configurable via `MCP_GLOBAL_CONFIG`)
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-filesystem", "/path/to/allowed/dir"],
+      "description": "File system read/write access"
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-github"],
+      "env": { "GITHUB_TOKEN": "ghp_xxx" },
+      "description": "GitHub API access"
+    }
+  }
+}
+```
+
+### Project Config
+
+MCP servers can also be defined in the project-level `.ai-pipeline.json` (see below). Project-level servers override global servers with the same name.
+
+### Querying MCP via API
+
+```bash
+# List active MCP servers
+curl http://localhost:8080/api/mcp/servers
+
+# Response example:
+# [{"name":"filesystem","transport":"stdio","description":"File system access","command":"npx"}]
+```
+
+## Project Configuration (.ai-pipeline.json)
+
+Place a `.ai-pipeline.json` file in the project root to customize pipeline behavior per-project:
+
+```json
+{
+  "triggerLabel": "auto-implement",
+  "branchPrefix": "feature/",
+  "skipStages": ["test"],
+  "stages": {
+    "implement": { "maxRetries": 5, "timeout": 300000 },
+    "review": { "skip": true }
+  },
+  "llm": {
+    "implement": { "model": "claude-opus-4-6", "temperature": 0.1, "maxTokens": 16384 },
+    "review": { "model": "deepseek-coder-v2" }
+  },
+  "mcpServers": {
+    "database": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-server-sqlite", "./data.db"],
+      "description": "Project database access"
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `triggerLabel` | string | Issue label that triggers the pipeline (default: `"auto-implement"`) |
+| `branchPrefix` | string | Branch name prefix for generated branches (default: `"feature/"`) |
+| `skipStages` | string[] | Stages to skip entirely |
+| `stages.<name>.skip` | boolean | Skip a specific stage |
+| `stages.<name>.maxRetries` | number | Override max retry count for a stage |
+| `stages.<name>.timeout` | number | Override timeout (ms) for a stage |
+| `llm.<taskType>.model` | string | Override LLM model for a task type |
+| `llm.<taskType>.temperature` | number | Override temperature |
+| `llm.<taskType>.maxTokens` | number | Override max tokens |
+| `mcpServers` | object | Project-level MCP server definitions (overrides global) |
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/webhook/gitlab` | POST | GitLab webhook receiver |
+| `/webhook/github` | POST | GitHub webhook receiver |
+| `/api/trigger` | POST | CLI trigger (no signature) |
+| `/api/resume/:pipelineId` | POST | Resume blocked pipeline |
+| `/api/pipelines` | GET | Pipeline list (?status=&project_id=) |
+| `/api/pipelines/:id` | GET | Pipeline detail |
+| `/api/pipelines/:id/logs` | GET | Pipeline audit logs |
+| `/api/llm/routes` | GET | LLM route configuration |
+| `/api/llm/routes/:taskType` | PUT | Override LLM route |
+| `/api/llm/routes/:taskType` | DELETE | Clear LLM route override |
+| `/api/skills` | GET | Skills list |
+| `/api/mcp/servers` | GET | MCP server list |
+| `/api/config` | GET | Runtime config (sanitized) |
+| `/health` | GET | Health check |
+| `/status` | GET | Server status |
+| `/dashboard/` | GET | Web Dashboard |
 
 ## License
 
