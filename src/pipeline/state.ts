@@ -69,6 +69,23 @@ export class StateStore {
     return rows.map((r) => JSON.parse(r.data));
   }
 
+  /** 列出流水线（支持 status 和 project_id 过滤） */
+  list(filters?: { status?: string; projectId?: string }): PipelineInstance[] {
+    let sql = "SELECT data FROM pipelines WHERE 1=1";
+    const params: string[] = [];
+    if (filters?.status) {
+      sql += " AND status = ?";
+      params.push(filters.status);
+    }
+    if (filters?.projectId) {
+      sql += " AND project_id = ?";
+      params.push(filters.projectId);
+    }
+    sql += " ORDER BY created_at DESC";
+    const rows = this.db.prepare(sql).all(...params) as { data: string }[];
+    return rows.map((r) => JSON.parse(r.data));
+  }
+
   /** 获取项目的所有流水线 */
   getByProject(projectId: string): PipelineInstance[] {
     const rows = this.db
