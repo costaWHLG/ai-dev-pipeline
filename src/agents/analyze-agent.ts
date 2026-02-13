@@ -48,7 +48,7 @@ export class AnalyzeAgent extends BaseAgent {
       projectContext: input.projectContext ?? await this.readProjectContext(workspace),
     };
 
-    const result = await super.execute(analyzeInput, workspace, pipelineId);
+    const result = await super.execute(analyzeInput, workspace, pipelineId) as Record<string, unknown>;
 
     // 将结果写入产物目录
     const artifactDir = path.join(workspace, ".ai-pipeline", pipelineId);
@@ -57,6 +57,17 @@ export class AnalyzeAgent extends BaseAgent {
     }
     const outputPath = path.join(artifactDir, "requirements.json");
     fs.writeFileSync(outputPath, JSON.stringify(result, null, 2), "utf-8");
+
+    // confidence 低于阈值时抛出错误，触发人工澄清
+    const confidence = typeof result?.confidence === "number" ? result.confidence : 1;
+    const questions = Array.isArray(result?.clarificationQuestions) ? result.clarificationQuestions : [];
+
+    if (confidence < 0.7 && questions.length > 0) {
+      const questionList = questions.map((q: string, i: number) => `${i + 1}. ${q}`).join("\n");
+      throw new Error(
+        `需求置信度不足 (${confidence})，需要澄清以下问题:\n${questionList}`
+      );
+    }
 
     return result;
   }
