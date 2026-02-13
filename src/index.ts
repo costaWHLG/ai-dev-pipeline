@@ -11,6 +11,8 @@ import { PipelineEngine } from "./pipeline/engine.js";
 import { StateStore } from "./pipeline/state.js";
 import { Notifier } from "./pipeline/notifier.js";
 import { createAdapter } from "./adapters/adapter-factory.js";
+import type { NotificationChannel } from "./notification/channel.js";
+import { WeComChannel } from "./notification/wecom-channel.js";
 import { LLMRouter } from "./llm/router.js";
 import { AnalyzeAgent } from "./agents/analyze-agent.js";
 import { DesignAgent } from "./agents/design-agent.js";
@@ -32,7 +34,14 @@ async function main() {
   const auditLogger = new AuditLogger();
   const llmRouter = new LLMRouter();
 
-  const notifier = new Notifier((source) => createAdapter(source as "gitlab" | "github"));
+  // 构建通知渠道
+  const channels: NotificationChannel[] = [];
+  if (config.wecomWebhookUrl) {
+    channels.push(new WeComChannel(config.wecomWebhookUrl));
+    logger.info("企业微信通知渠道已启用");
+  }
+
+  const notifier = new Notifier((source) => createAdapter(source as "gitlab" | "github"), channels);
 
   // 初始化 Agent 实例
   const agents: Record<string, { execute: (input: Record<string, unknown>, workspace: string, pipelineId: string) => Promise<unknown> }> = {

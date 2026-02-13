@@ -155,6 +155,21 @@ npm run start
 | `GIT_AUTHOR_EMAIL` | Git commit author email | No |
 | `MCP_GLOBAL_CONFIG` | Global MCP config file path | No (default: ~/.ai-pipeline/mcp-servers.json) |
 | `SKILLS_GLOBAL_DIR` | Global skills directory | No (default: ~/.ai-pipeline/skills) |
+| `WECOM_WEBHOOK_URL` | WeCom (WeChat Work) bot webhook URL | No |
+
+## Notification
+
+The pipeline supports sending failure notifications through extensible notification channels. When a pipeline stage fails and requires human intervention, notifications are sent to all configured channels in addition to the default Git comment/log fallback.
+
+### WeCom (WeChat Work) Bot
+
+Set the `WECOM_WEBHOOK_URL` environment variable to enable WeCom group bot notifications. The bot sends markdown-formatted messages containing pipeline ID, failed stage, error details, and timestamp.
+
+```bash
+WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
+```
+
+When the URL is not set, the notification channel is simply skipped — no impact on existing behavior.
 
 ## Webhook Configuration
 
@@ -195,6 +210,7 @@ ai-dev-pipeline/
 │   ├── gateway/        # Webhook gateway and event normalization
 │   ├── llm/            # LLM routing, proxy, and providers
 │   ├── mcp/            # MCP (Model Context Protocol) integration
+│   ├── notification/   # Notification channels (WeCom, etc.)
 │   ├── pipeline/       # Pipeline engine (state, queue, retry, lock)
 │   ├── skills/         # Skills management and execution
 │   ├── types/          # TypeScript type definitions

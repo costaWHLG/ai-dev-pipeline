@@ -43,6 +43,7 @@ export interface Config {
   gitAuthorEmail: string;
   mcpGlobalConfig: string;
   skillsGlobalDir: string;
+  wecomWebhookUrl: string;
 }
 
 function env(key: string, fallback = ""): string {
@@ -87,6 +88,7 @@ export function loadConfig(): Config {
     gitAuthorEmail: env("GIT_AUTHOR_EMAIL", "ai-bot@company.com"),
     mcpGlobalConfig: env("MCP_GLOBAL_CONFIG", "~/.ai-pipeline/mcp-servers.json"),
     skillsGlobalDir: env("SKILLS_GLOBAL_DIR", "~/.ai-pipeline/skills"),
+    wecomWebhookUrl: env("WECOM_WEBHOOK_URL"),
   };
 }
 

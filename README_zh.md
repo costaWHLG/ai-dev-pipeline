@@ -155,6 +155,21 @@ npm run start
 | `GIT_AUTHOR_EMAIL` | Git 提交作者邮箱 | 否 |
 | `MCP_GLOBAL_CONFIG` | 全局 MCP 配置文件路径 | 否（默认: ~/.ai-pipeline/mcp-servers.json）|
 | `SKILLS_GLOBAL_DIR` | 全局 Skills 目录 | 否（默认: ~/.ai-pipeline/skills）|
+| `WECOM_WEBHOOK_URL` | 企业微信群机器人 Webhook URL | 否 |
+
+## 通知配置
+
+流水线支持通过可扩展的通知渠道发送失败通知。当流水线阶段失败需要人工介入时，除了默认的 Git 评论/日志回退外，还会向所有已配置的渠道发送通知。
+
+### 企业微信群机器人
+
+设置 `WECOM_WEBHOOK_URL` 环境变量即可启用企业微信群机器人通知。机器人会发送 markdown 格式的消息，包含流水线 ID、失败阶段、错误详情和时间戳。
+
+```bash
+WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
+```
+
+未设置该 URL 时，通知渠道直接跳过，不影响现有行为。
 
 ## Webhook 配置
 
@@ -195,6 +210,7 @@ ai-dev-pipeline/
 │   ├── gateway/        # Webhook 网关和事件归一化
 │   ├── llm/            # LLM 路由、代理、提供者
 │   ├── mcp/            # MCP（模型上下文协议）集成
+│   ├── notification/   # 通知渠道（企业微信等）
 │   ├── pipeline/       # 流水线引擎（状态、队列、重试、锁）
 │   ├── skills/         # Skills 管理与执行
 │   ├── types/          # TypeScript 类型定义

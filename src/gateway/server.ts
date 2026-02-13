@@ -256,6 +256,7 @@ export async function createServer(deps: ServerDeps) {
         internalModel: config.llm.internalModel,
         hasProxy: !!config.llm.proxy,
       },
+      wecom: { enabled: !!config.wecomWebhookUrl },
     });
   });
 
