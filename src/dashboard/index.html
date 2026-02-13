@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Dev Pipeline — Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="logo">AI Dev Pipeline</div>
+      <ul class="nav-list">
+        <li class="nav-item active" data-tab="overview">概览</li>
+        <li class="nav-item" data-tab="pipelines">流水线</li>
+        <li class="nav-item" data-tab="llm">LLM 配置</li>
+        <li class="nav-item" data-tab="skills">Skills</li>
+        <li class="nav-item" data-tab="mcp">MCP</li>
+      </ul>
+    </nav>
+    <main class="content">
+      <!-- 概览 -->
+      <section id="tab-overview" class="tab-panel active">
+        <h2>概览</h2>
+        <div class="stats-grid" id="stats-grid"></div>
+        <h3>最近流水线</h3>
+        <table class="data-table" id="recent-pipelines">
+          <thead><tr><th>ID</th><th>项目</th><th>类型</th><th>状态</th><th>创建时间</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- 流水线 -->
+      <section id="tab-pipelines" class="tab-panel">
+        <h2>流水线</h2>
+        <div class="filters">
+          <select id="filter-status"><option value="">全部状态</option><option value="running">运行中</option><option value="success">成功</option><option value="failed">失败</option><option value="blocked">阻塞</option></select>
+          <button id="btn-filter" class="btn">筛选</button>
+        </div>
+        <table class="data-table" id="pipelines-table">
+          <thead><tr><th>ID</th><th>项目</th><th>类型</th><th>状态</th><th>阶段</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="pipeline-detail" class="detail-panel" style="display:none"></div>
+      </section>
+
+      <!-- LLM 配置 -->
+      <section id="tab-llm" class="tab-panel">
+        <h2>LLM 路由配置</h2>
+        <table class="data-table" id="llm-routes-table">
+          <thead><tr><th>任务类型</th><th>提供商</th><th>模型</th><th>温度</th><th>最大 Token</th><th>降级模型</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <!-- LLM 覆盖表单 -->
+        <div id="llm-override-form" class="form-panel" style="display:none">
+          <h3>覆盖路由 — <span id="llm-override-task"></span></h3>
+          <label>提供商 <select id="llm-provider"><option value="anthropic">anthropic</option><option value="openai">openai</option><option value="internal">internal</option></select></label>
+          <label>模型 <input type="text" id="llm-model"></label>
+          <label>温度 <input type="number" id="llm-temperature" step="0.1" min="0" max="2"></label>
+          <label>最大 Token <input type="number" id="llm-max-tokens" step="1024"></label>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="btn-save-override">保存</button>
+            <button class="btn" id="btn-cancel-override">取消</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Skills -->
+      <section id="tab-skills" class="tab-panel">
+        <h2>Skills</h2>
+        <table class="data-table" id="skills-table">
+          <thead><tr><th>名称</th><th>描述</th><th>来源</th><th>标签</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <!-- MCP -->
+      <section id="tab-mcp" class="tab-panel">
+        <h2>MCP Servers</h2>
+        <table class="data-table" id="mcp-table">
+          <thead><tr><th>名称</th><th>类型</th><th>描述</th><th>命令/URL</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
