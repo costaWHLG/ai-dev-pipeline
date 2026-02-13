@@ -92,13 +92,51 @@ export abstract class BaseAgent {
   /**
    * Agent 主循环：发送消息 → 处理 tool_use → 返回 tool_result → 继续
    * 直到 stop_reason === "end_turn" 或达到最大轮数
+   * 外部 API 失败时自动 fallback 到内网模型
    */
   async execute(
     input: Record<string, unknown>,
     workspace: string,
     pipelineId: string,
   ): Promise<unknown> {
-    const llmConfig = this.router.route(this.taskType);
+    try {
+      return await this.runAgentLoop(
+        this.router.route(this.taskType),
+        input,
+        workspace,
+        pipelineId,
+      );
+    } catch (err) {
+      // 外部 API 不可用时自动 fallback
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const isApiError = /\b(5\d{2}|ECONNREFUSED|ETIMEDOUT|fetch failed|model_not_found)\b/i.test(errMsg);
+
+      if (isApiError) {
+        const fallbackConfig = this.router.fallback(this.taskType);
+        console.warn(
+          `Primary LLM failed (${errMsg}), falling back to ${fallbackConfig.provider}/${fallbackConfig.model}`,
+        );
+        this.auditLogger.log({
+          timestamp: new Date().toISOString(),
+          pipelineId,
+          stage: this.taskType,
+          event: "llm_invoke",
+          metadata: { fallback: true, reason: errMsg, model: fallbackConfig.model },
+        });
+        return await this.runAgentLoop(fallbackConfig, input, workspace, pipelineId);
+      }
+
+      throw err;
+    }
+  }
+
+  /** Agent 循环核心逻辑 */
+  private async runAgentLoop(
+    llmConfig: LLMConfig,
+    input: Record<string, unknown>,
+    workspace: string,
+    pipelineId: string,
+  ): Promise<unknown> {
     const client = this.createClient(llmConfig);
 
     const messages: Anthropic.Messages.MessageParam[] = [
