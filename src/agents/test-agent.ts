@@ -55,8 +55,21 @@ export class TestAgent extends BaseAgent {
     };
 
     // 委托给基类的 agent 循环
-    // test-fix prompt 会指导模型自行运行命令、分析失败、修复并重试
     const result = await super.execute(testInput, workspace, pipelineId);
+
+    // 将测试输出写入 test-report.log
+    const artifactDir = path.join(workspace, ".ai-pipeline", pipelineId);
+    if (!fs.existsSync(artifactDir)) {
+      fs.mkdirSync(artifactDir, { recursive: true });
+    }
+    const reportContent = typeof result === "string"
+      ? result
+      : JSON.stringify(result, null, 2);
+    fs.writeFileSync(
+      path.join(artifactDir, "test-report.log"),
+      reportContent,
+      "utf-8",
+    );
 
     return result;
   }
