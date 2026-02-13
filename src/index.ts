@@ -4,8 +4,9 @@
 
 import { config } from "./config.js";
 import { AuditLogger } from "./audit/logger.js";
-import { createServer } from "./gateway/server.js";
+import { createServer, type ServerDeps } from "./gateway/server.js";
 import { TaskQueue } from "./pipeline/queue.js";
+import { SkillsManager } from "./skills/skills-manager.js";
 import { PipelineEngine } from "./pipeline/engine.js";
 import { StateStore } from "./pipeline/state.js";
 import { Notifier } from "./pipeline/notifier.js";
@@ -93,12 +94,16 @@ async function main() {
     }
   }
 
+  // 初始化 Skills
+  const skillsManager = new SkillsManager();
+  skillsManager.load();
+
   // 启动 HTTP 服务
-  const server = await createServer(
-    async (event) => {
+  const serverDeps: ServerDeps = {
+    onEvent: async (event) => {
       await queue.enqueue(event);
     },
-    async (pipelineId, fromStage, additionalContext) => {
+    onResume: async (pipelineId, fromStage, additionalContext) => {
       logger.info({ pipelineId, fromStage, additionalContext }, "Resume requested");
       // 确定恢复起始阶段：优先使用指定阶段，否则从最后失败的阶段恢复
       let stage = fromStage;
@@ -114,7 +119,12 @@ async function main() {
       }
       await engine.retry(pipelineId, stage);
     },
-  );
+    stateStore,
+    auditLogger,
+    llmRouter,
+    skillsManager,
+  };
+  const server = await createServer(serverDeps);
 
   await server.listen({ port: config.port, host: "0.0.0.0" });
   logger.info(`Server listening on port ${config.port}`);
