@@ -10,3 +10,5 @@ export type {
   AuditEvent,
 } from "./pipeline.js";
 export type { ToolChain } from "./toolchain.js";
+export type { ProjectConfig, StageOverride, LLMOverride } from "./project-config.js";
+export { loadProjectConfig } from "./project-config.js";

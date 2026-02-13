@@ -3,7 +3,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { AuditRecord, DevEvent, PipelineInstance, PipelineStage, StageResult } from "../types/index.js";
+import type { AuditRecord, DevEvent, PipelineInstance, PipelineStage, StageResult, ProjectConfig } from "../types/index.js";
+import { loadProjectConfig } from "../types/index.js";
 import { AuditLogger } from "../audit/logger.js";
 import { projectLock } from "./lock.js";
 import { Notifier } from "./notifier.js";
@@ -76,7 +77,13 @@ export class PipelineEngine {
 
   /** 执行流水线 */
   async run(instance: PipelineInstance): Promise<PipelineInstance> {
-    const stages = getStagesForEvent(instance.event.type);
+    let stages = getStagesForEvent(instance.event.type);
+
+    // 加载项目级配置，应用阶段覆盖
+    const projectConfig = loadProjectConfig(instance.workspace);
+    if (projectConfig) {
+      stages = this.applyProjectConfig(stages, projectConfig);
+    }
 
     await projectLock.acquire(instance.event.project.id);
 
@@ -241,5 +248,31 @@ export class PipelineEngine {
     return new Promise((_, reject) => {
       setTimeout(() => reject(new Error(`Stage "${stageName}" timed out after ${ms}ms`)), ms);
     });
+  }
+
+  /** 应用项目级配置覆盖 */
+  private applyProjectConfig(stages: PipelineStage[], projectConfig: ProjectConfig): PipelineStage[] {
+    let result = stages;
+
+    // 过滤跳过的阶段
+    if (projectConfig.skipStages?.length) {
+      result = result.filter((s) => !projectConfig.skipStages!.includes(s.agent));
+    }
+
+    // 应用阶段级覆盖
+    if (projectConfig.stages) {
+      result = result.map((s) => {
+        const override = projectConfig.stages![s.agent] ?? projectConfig.stages![s.name];
+        if (!override) return s;
+        if (override.skip) return null;
+        return {
+          ...s,
+          maxRetries: override.maxRetries ?? s.maxRetries,
+          timeout: override.timeout ?? s.timeout,
+        };
+      }).filter((s): s is PipelineStage => s !== null);
+    }
+
+    return result;
   }
 }

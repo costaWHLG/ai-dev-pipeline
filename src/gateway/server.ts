@@ -11,6 +11,9 @@ import { handleGitHubWebhook } from "./github-webhook.js";
 /** 事件处理回调 */
 export type EventHandler = (event: DevEvent) => Promise<void>;
 
+/** 恢复被阻塞流水线的回调 */
+export type ResumeHandler = (pipelineId: string, fromStage?: string, additionalContext?: string) => Promise<void>;
+
 /** 服务状态信息 */
 interface ServerStatus {
   uptime: number;
@@ -21,8 +24,9 @@ interface ServerStatus {
 /**
  * 创建 Fastify 服务实例
  * @param onEvent 事件回调，收到有效事件后调用
+ * @param onResume 恢复回调，收到恢复指令后调用
  */
-export async function createServer(onEvent: EventHandler) {
+export async function createServer(onEvent: EventHandler, onResume?: ResumeHandler) {
   const app = Fastify({ logger: true });
 
   // 内部统计
@@ -64,7 +68,17 @@ export async function createServer(onEvent: EventHandler) {
   /** GitHub webhook 入口 */
   app.post("/webhook/github", async (request, reply) => {
     try {
-      const event = handleGitHubWebhook(request);
+      const { event, resumeCommand } = handleGitHubWebhook(request);
+
+      // 检测到恢复指令时，直接触发恢复流程
+      if (resumeCommand) {
+        if (onResume) {
+          await onResume(resumeCommand.pipelineId, resumeCommand.fromStage, resumeCommand.additionalContext);
+          return reply.code(200).send({ ok: true, resumed: true, pipelineId: resumeCommand.pipelineId });
+        }
+        return reply.code(501).send({ ok: false, error: "Resume not configured" });
+      }
+
       const dispatched = await dispatchEvent(event);
       if (dispatched) {
         return reply.code(200).send({ ok: true, eventId: dispatched.id });
@@ -88,6 +102,22 @@ export async function createServer(onEvent: EventHandler) {
       return reply.code(200).send({ ok: true, eventId: dispatched?.id });
     } catch (err: any) {
       request.log.error(err, "CLI 触发处理失败");
+      return reply.code(500).send({ ok: false, error: err.message });
+    }
+  });
+
+  /** 恢复被阻塞的流水线 */
+  app.post("/api/resume/:pipelineId", async (request, reply) => {
+    try {
+      const { pipelineId } = request.params as { pipelineId: string };
+      const body = request.body as { fromStage?: string; additionalContext?: string } | undefined;
+      if (onResume) {
+        await onResume(pipelineId, body?.fromStage, body?.additionalContext);
+        return reply.code(200).send({ ok: true, pipelineId });
+      }
+      return reply.code(501).send({ ok: false, error: "Resume not configured" });
+    } catch (err: any) {
+      request.log.error(err, "流水线恢复处理失败");
       return reply.code(500).send({ ok: false, error: err.message });
     }
   });

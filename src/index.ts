@@ -94,9 +94,27 @@ async function main() {
   }
 
   // 启动 HTTP 服务
-  const server = await createServer(async (event) => {
-    await queue.enqueue(event);
-  });
+  const server = await createServer(
+    async (event) => {
+      await queue.enqueue(event);
+    },
+    async (pipelineId, fromStage, additionalContext) => {
+      logger.info({ pipelineId, fromStage, additionalContext }, "Resume requested");
+      // 确定恢复起始阶段：优先使用指定阶段，否则从最后失败的阶段恢复
+      let stage = fromStage;
+      if (!stage) {
+        const status = engine.getStatus(pipelineId);
+        if (!status) throw new Error(`Pipeline ${pipelineId} not found`);
+        const failedStage = [...status.stages].reverse().find((s) => s.status === "failed");
+        if (failedStage) {
+          stage = failedStage.stage;
+        } else {
+          throw new Error(`Pipeline ${pipelineId} has no failed stage to resume from`);
+        }
+      }
+      await engine.retry(pipelineId, stage);
+    },
+  );
 
   await server.listen({ port: config.port, host: "0.0.0.0" });
   logger.info(`Server listening on port ${config.port}`);

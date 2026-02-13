@@ -2,7 +2,7 @@
  * 编码实现 Agent — 根据任务描述和设计方案实现代码
  *
  * 输入：tasks.json + design.json + project context
- * 处理：逐任务实现，每个逻辑单元执行 git commit
+ * 处理：按依赖拓扑排序并行执行子任务，每个逻辑单元执行 git commit
  */
 
 import fs from "node:fs";
@@ -15,6 +15,14 @@ import { config } from "../config.js";
 import type { TaskType } from "../llm/providers.js";
 
 const execFileAsync = promisify(execFile);
+
+/** tasks.json 中单个任务的结构 */
+interface TaskItem {
+  id: string;
+  title: string;
+  description: string;
+  dependsOn: string[];
+}
 
 export class ImplementAgent extends BaseAgent {
   get taskType(): TaskType {
@@ -82,6 +90,21 @@ export class ImplementAgent extends BaseAgent {
     const projectContext = input.projectContext
       ?? this.readProjectContext(workspace);
 
+    // 判断是否为带依赖关系的任务列表，走并行执行路径
+    const taskItems = this.extractTaskItems(tasks);
+    if (taskItems) {
+      console.log(`检测到 ${taskItems.length} 个子任务，启用依赖拓扑并行执行`);
+      return await this.executeTasksWithDependencies(
+        taskItems,
+        workspace,
+        pipelineId,
+        design,
+        projectContext as string,
+        techStack,
+      );
+    }
+
+    // 回退到单次 agent 执行路径
     const implInput: Record<string, unknown> = {
       task: tasks,
       design,
@@ -95,6 +118,159 @@ export class ImplementAgent extends BaseAgent {
     await this.gitCommitAll(workspace, `feat: implement tasks for pipeline ${pipelineId}`);
 
     return result;
+  }
+
+  /**
+   * 从 tasks 输入中提取 TaskItem 数组
+   * 支持 { tasks: [...] } 或直接 [...] 两种格式
+   * 如果不是带 dependsOn 的任务列表，返回 null
+   */
+  private extractTaskItems(tasks: unknown): TaskItem[] | null {
+    let arr: unknown[] | null = null;
+
+    if (Array.isArray(tasks)) {
+      arr = tasks;
+    } else if (
+      tasks &&
+      typeof tasks === "object" &&
+      Array.isArray((tasks as Record<string, unknown>).tasks)
+    ) {
+      arr = (tasks as Record<string, unknown>).tasks as unknown[];
+    }
+
+    if (!arr || arr.length === 0) return null;
+
+    // 校验每个元素是否具备 TaskItem 结构
+    const valid = arr.every(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        typeof (item as any).id === "string" &&
+        typeof (item as any).title === "string" &&
+        Array.isArray((item as any).dependsOn),
+    );
+
+    return valid ? (arr as TaskItem[]) : null;
+  }
+
+  /**
+   * 按依赖拓扑排序将任务分成多个"波次"
+   * 同一波次内的任务互不依赖，可以并行执行
+   */
+  private buildDependencyWaves(tasks: TaskItem[]): TaskItem[][] {
+    const taskMap = new Map<string, TaskItem>();
+    for (const t of tasks) {
+      taskMap.set(t.id, t);
+    }
+
+    const completed = new Set<string>();
+    const remaining = new Map<string, TaskItem>(taskMap);
+    const waves: TaskItem[][] = [];
+
+    while (remaining.size > 0) {
+      // 找出所有依赖已完成的任务
+      const wave: TaskItem[] = [];
+      for (const [id, task] of remaining) {
+        const depsResolved = task.dependsOn.every((dep) => completed.has(dep));
+        if (depsResolved) {
+          wave.push(task);
+        }
+      }
+
+      if (wave.length === 0) {
+        // 存在循环依赖，将剩余任务强制放入最后一波
+        console.warn(
+          `检测到循环依赖或无法解析的依赖，强制执行剩余 ${remaining.size} 个任务`,
+        );
+        waves.push([...remaining.values()]);
+        break;
+      }
+
+      // 标记本波次任务为已完成
+      for (const task of wave) {
+        completed.add(task.id);
+        remaining.delete(task.id);
+      }
+      waves.push(wave);
+    }
+
+    return waves;
+  }
+
+  /**
+   * 按依赖拓扑排序并行执行子任务
+   * 每个波次内的任务通过 Promise.all 并行执行
+   * 每个任务完成后独立 git commit
+   */
+  private async executeTasksWithDependencies(
+    tasks: TaskItem[],
+    workspace: string,
+    pipelineId: string,
+    design: unknown,
+    projectContext: string,
+    techStack: unknown,
+  ): Promise<{ results: { taskId: string; title: string; result: unknown }[] }> {
+    const waves = this.buildDependencyWaves(tasks);
+    const allResults: { taskId: string; title: string; result: unknown }[] = [];
+
+    console.log(
+      `任务拓扑排序完成：共 ${waves.length} 个波次，` +
+      `分布 [${waves.map((w) => w.length).join(", ")}]`,
+    );
+
+    for (let waveIdx = 0; waveIdx < waves.length; waveIdx++) {
+      const wave = waves[waveIdx];
+      console.log(
+        `开始执行波次 ${waveIdx + 1}/${waves.length}，` +
+        `包含 ${wave.length} 个任务: [${wave.map((t) => t.id).join(", ")}]`,
+      );
+
+      const wavePromises = wave.map(async (task) => {
+        const taskInput: Record<string, unknown> = {
+          task: {
+            id: task.id,
+            title: task.title,
+            description: task.description,
+          },
+          design,
+          projectContext,
+          techStack,
+        };
+
+        console.log(`任务 ${task.id} 开始执行: ${task.title}`);
+        const startTime = Date.now();
+
+        try {
+          const result = await super.execute(taskInput, workspace, pipelineId);
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+          console.log(`任务 ${task.id} 完成 (${duration}s): ${task.title}`);
+
+          // 每个任务完成后独立 commit
+          await this.gitCommitAll(
+            workspace,
+            `feat(${task.id}): ${task.title}`,
+          );
+
+          return { taskId: task.id, title: task.title, result };
+        } catch (err) {
+          const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(`任务 ${task.id} 失败 (${duration}s): ${errMsg}`);
+          return { taskId: task.id, title: task.title, result: { error: errMsg } };
+        }
+      });
+
+      const waveResults = await Promise.all(wavePromises);
+      allResults.push(...waveResults);
+    }
+
+    // 最终汇总 commit
+    await this.gitCommitAll(
+      workspace,
+      `feat: complete all ${tasks.length} tasks for pipeline ${pipelineId}`,
+    );
+
+    return { results: allResults };
   }
 
   /** 确保工作目录已初始化 git 仓库并切换到目标分支 */
@@ -176,3 +352,4 @@ export class ImplementAgent extends BaseAgent {
     return "(no project context found)";
   }
 }
+
