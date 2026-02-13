@@ -150,11 +150,21 @@ See [full config fields](#project-config-fields) in the reference section.
 
 ### Skills
 
-Skills are reusable prompt-driven capabilities. Three scopes: builtin (`src/skills/`), global (`~/.ai-pipeline/skills/`), project (`.ai-pipeline/skills/`). Project-level skills override global ones with the same name.
+Skills are reusable prompt-driven capabilities defined as Markdown files with YAML front matter. Three scopes: builtin (`src/skills/`), global (`~/.ai-pipeline/skills/`), project (`.ai-pipeline/skills/`). Project-level skills override global ones with the same name.
+
+> **Current limitations:** Skills currently support only "prompt template + single LLM call" — the executor renders `{{variable}}` placeholders and sends the result to Claude for a one-shot response. The following are **not yet supported**:
+> - Script execution (shell/Python/Node attached to a skill)
+> - File template generation (scaffolding via Handlebars/EJS templates)
+> - Reference document injection (auto-loading local files or URLs into context)
+> - Multi-turn agent loops (tool_use cycles within a skill)
+>
+> Skills are also not invoked by pipeline agents during execution; they are only callable via the REST API (`GET /api/skills`).
 
 ### MCP Servers
 
-Configure in `~/.ai-pipeline/mcp-servers.json` (global) or `.ai-pipeline.json` `mcpServers` field (project-level, overrides global).
+Configure in `~/.ai-pipeline/mcp-servers.json` (global) or `.ai-pipeline.json` `mcpServers` field (project-level, overrides global). Only stdio transport is supported; SSE transport is not yet implemented.
+
+> **Current limitations:** MCP server lifecycle management (start/stop/tool discovery) and the tool registry are implemented, but **MCP tools are not yet wired into the agent execution loop**. Agents currently use only built-in tools (`read_file`, `write_file`, `list_files`, `bash`). MCP tool invocation is available in the codebase (`MCPManager.callTool`) but unreachable from pipeline agents.
 
 ## Reference
 

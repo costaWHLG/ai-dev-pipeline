@@ -150,11 +150,21 @@ curl -X PUT http://localhost:8080/api/llm/routes/implement \
 
 ### Skills
 
-Skills 是可复用的 Prompt 驱动能力。三个作用域：内置（`src/skills/`）、全局（`~/.ai-pipeline/skills/`）、项目级（`.ai-pipeline/skills/`）。同名时项目级覆盖全局。
+Skills 是可复用的 Prompt 驱动能力，以 Markdown + YAML front matter 格式定义。三个作用域：内置（`src/skills/`）、全局（`~/.ai-pipeline/skills/`）、项目级（`.ai-pipeline/skills/`）。同名时项目级覆盖全局。
+
+> **当前能力边界：** Skills 目前仅支持"Prompt 模板 + 单次 LLM 调用"——执行器渲染 `{{variable}}` 占位符后发送给 Claude 获取一次性回复。以下能力**尚未支持**：
+> - 脚本执行（skill 附带 shell/Python/Node 脚本）
+> - 文件模板生成（通过 Handlebars/EJS 模板生成脚手架文件）
+> - 参考文档注入（自动加载本地文件或 URL 到 LLM 上下文）
+> - 多轮 Agent 循环（skill 内部的 tool_use 循环）
+>
+> 此外，流水线 Agent 执行过程中不会调用 Skills，当前仅可通过 REST API（`GET /api/skills`）访问。
 
 ### MCP 服务
 
-全局配置：`~/.ai-pipeline/mcp-servers.json`；项目级配置：`.ai-pipeline.json` 的 `mcpServers` 字段（覆盖全局同名配置）。
+全局配置：`~/.ai-pipeline/mcp-servers.json`；项目级配置：`.ai-pipeline.json` 的 `mcpServers` 字段（覆盖全局同名配置）。仅支持 stdio 传输模式，SSE 传输尚未实现。
+
+> **当前能力边界：** MCP 服务的生命周期管理（启动/停止/工具发现）和工具注册表已实现，但 **MCP 工具尚未接入 Agent 执行循环**。Agent 目前仅使用内置工具（`read_file`、`write_file`、`list_files`、`bash`）。MCP 工具调用能力（`MCPManager.callTool`）已存在于代码中，但流水线 Agent 无法触达。
 
 ## 参考
 
